@@ -307,8 +307,8 @@ function defaultCfg(){
     barrier1:'+0.25', barrier2:'-0.25', contract_type:'ONETOUCH',
     rest_seconds:30, skip_rest_on_win:false, take_profit:0, stop_loss:0,
     // Logic 3 — one attached contract per reversal side (independent params)
-    attach_high:{ type:'none', barrier:'+0.25', duration_value:5, duration_unit:'t', stake:1 },
-    attach_low :{ type:'none', barrier:'-0.25', duration_value:5, duration_unit:'t', stake:1 },
+    combo_high_on:false, combo_high_type:'FALL', combo_high_barrier:'+2', combo_high_dv:5, combo_high_du:'t', combo_high_stake:1,
+    combo_low_on:false,  combo_low_type:'RISE', combo_low_barrier:'-2', combo_low_dv:5, combo_low_du:'t', combo_low_stake:1,
     filter:'none', momentum_candles:3, momentum_body_mult:1.0,
     trend_candles:5, min_body_size:0.05, max_overlap:0.5, min_dir_candles:3,
   };
@@ -401,18 +401,23 @@ function fireReversal(slot, side){
 
   // ── Logic 3: PRIMARY one touch + ONE optional attached contract, fired together ──
   if (c.logic === 3) {
-    const attach = side==='high' ? c.attach_high : c.attach_low;
+    const on      = side==='high' ? c.combo_high_on      : c.combo_low_on;
+    const aType   = side==='high' ? c.combo_high_type    : c.combo_low_type;
+    const aBar    = side==='high' ? c.combo_high_barrier : c.combo_low_barrier;
+    const aDV     = side==='high' ? c.combo_high_dv      : c.combo_low_dv;
+    const aDU     = side==='high' ? c.combo_high_du      : c.combo_low_du;
+    const aStake  = side==='high' ? c.combo_high_stake   : c.combo_low_stake;
+
     const primaryParams = buildParams(c.symbol,'ONETOUCH',barrier,c.duration_value,c.duration_unit,c.stake);
     slot.emit(`Confirmed ${side.toUpperCase()} reversal — PRIMARY ONETOUCH @${barrier}`);
-
     const primaryP = runContract(slot, primaryParams, `PRIMARY ONETOUCH ${side.toUpperCase()}`, { role:'primary' })
       .catch(e => { slot.emit('Primary error: '+e.message,'err'); return null; });
 
     let comboP = Promise.resolve(null);
-    if (attach && attach.type && attach.type !== 'none') {
-      const ap = buildParams(c.symbol, attach.type, attach.barrier, attach.duration_value, attach.duration_unit, attach.stake);
-      slot.emit(`Combo attach — ${attach.type}${ap.barrier ? ' @'+ap.barrier : ''} | ${ap.duration}${ap.duration_unit} | $${ap.amount}`);
-      comboP = runContract(slot, ap, `COMBO ${attach.type}`, { role:'combo' })
+    if (on && aType && aType !== 'none') {
+      const ap = buildParams(c.symbol, aType, aBar, aDV, aDU, aStake);
+      slot.emit(`Combo attach — ${aType}${ap.barrier ? ' @'+ap.barrier : ''} | ${ap.duration}${ap.duration_unit} | $${ap.amount}`);
+      comboP = runContract(slot, ap, `COMBO ${aType}`, { role:'combo' })
         .catch(e => { slot.emit('Combo error: '+e.message,'err'); return null; });
     }
     // rest / momentum decision is based on the PRIMARY one touch ONLY
